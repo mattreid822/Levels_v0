@@ -89,9 +89,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	UAnimMontage* FireAnimation;
 
+	// time to wait (in seconds) between shots
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+	float TimeBetweenShots;
+
+	// muzzle flash for shooting gun
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+		class UParticleSystem* MuzzleParticles;
+
+	// impact particles for shooting gun
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+		class UParticleSystem* ImpactParticles;
+
 	/** Whether to use motion controller location for aiming. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	uint8 bUsingMotionControllers : 1;
+
+	// Kenny - ADS FUNCTION TO BE USED FOR ANIMATION, TO CHECK STATES 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
+		bool isZoomedIn;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 		float FullHealth;
@@ -133,8 +149,24 @@ public:
 
 protected:
 	
-	/** Fires a projectile. */
-	void OnFire();
+	
+	
+	// start fire
+	void Fire();
+
+	// stop fire
+	void EndFire();
+
+	// Fire shot from Gun
+	void StartFire();
+
+	FTimerHandle TimerHandle_HandleRefire;
+
+	// character will zoom in
+	void AimIn();
+
+	// chcracter will unzoom
+	void AimOut();
 
 	/** Resets HMD orientation and position in VR. */
 	void OnResetVR();

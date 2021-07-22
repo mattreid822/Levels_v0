@@ -86,7 +86,7 @@ ALevels_v0Character::ALevels_v0Character()
 
 	// Uncomment the following line to turn motion controllers on by default:
 	//bUsingMotionControllers = true;
-
+	isZoomedIn = false; // default boolean for Zoom
 }
 
 void ALevels_v0Character::BeginPlay()
@@ -131,8 +131,12 @@ void ALevels_v0Character::SetupPlayerInputComponent(class UInputComponent* Playe
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
 
 	// Bind fire event
-	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &ALevels_v0Character::OnFire);
+	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &ALevels_v0Character::StartFire);
+	PlayerInputComponent->BindAction("Fire", IE_Released, this, &ALevels_v0Character::EndFire);
 
+	// Zoom in/out
+	PlayerInputComponent->BindAction("ZoomIn", IE_Pressed, this, &ALevels_v0Character::AimIn); 
+	PlayerInputComponent->BindAction("ZoomIn", IE_Released, this, &ALevels_v0Character::AimOut);
 	// Enable touchscreen input
 	EnableTouchscreenMovement(PlayerInputComponent);
 
@@ -151,34 +155,28 @@ void ALevels_v0Character::SetupPlayerInputComponent(class UInputComponent* Playe
 	PlayerInputComponent->BindAxis("LookUpRate", this, &ALevels_v0Character::LookUpAtRate);
 }
 
-void ALevels_v0Character::OnFire()
+
+
+void ALevels_v0Character::Fire()
 {
-	// try and fire a projectile
-	if (ProjectileClass != nullptr)
-	{
-		UWorld* const World = GetWorld();
-		if (World != nullptr)
-		{
-			if (bUsingMotionControllers)
-			{
-				const FRotator SpawnRotation = VR_MuzzleLocation->GetComponentRotation();
-				const FVector SpawnLocation = VR_MuzzleLocation->GetComponentLocation();
-				World->SpawnActor<ALevels_v0Projectile>(ProjectileClass, SpawnLocation, SpawnRotation);
-			}
-			else
-			{
-				const FRotator SpawnRotation = GetControlRotation();
-				// MuzzleOffset is in camera space, so transform it to world space before offsetting from the character location to find the final muzzle position
-				const FVector SpawnLocation = ((FP_MuzzleLocation != nullptr) ? FP_MuzzleLocation->GetComponentLocation() : GetActorLocation()) + SpawnRotation.RotateVector(GunOffset);
+	FHitResult Hit;
 
-				//Set Spawn Collision Handling Override
-				FActorSpawnParameters ActorSpawnParams;
-				ActorSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
+	const float WeaponRange = 20000.f;
+	const FVector StartTrace = FirstPersonCameraComponent->GetComponentLocation();
+	const FVector EndTrace = (FirstPersonCameraComponent->GetForwardVector() * WeaponRange) + StartTrace;
 
-				// spawn the projectile at the muzzle
-				World->SpawnActor<ALevels_v0Projectile>(ProjectileClass, SpawnLocation, SpawnRotation, ActorSpawnParams);
-			}
+	FCollisionQueryParams QueryParams = FCollisionQueryParams(SCENE_QUERY_STAT(WeaponTrace), false, this);
+
+
+	if (GetWorld()->LineTraceSingleByChannel(Hit, StartTrace, EndTrace, ECC_Visibility, QueryParams)) {
+		if (ImpactParticles) {
+			UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ImpactParticles, FTransform(Hit.ImpactNormal.Rotation(), Hit.ImpactPoint));
+
 		}
+	}
+
+	if (MuzzleParticles) {
+		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleParticles, FP_Gun->GetSocketTransform(FName("Muzzle")));
 	}
 
 	// try and play the sound if specified
@@ -212,7 +210,7 @@ void ALevels_v0Character::BeginTouch(const ETouchIndex::Type FingerIndex, const 
 	}
 	if ((FingerIndex == TouchItem.FingerIndex) && (TouchItem.bMoved == false))
 	{
-		OnFire();
+		Fire();
 	}
 	TouchItem.bIsPressed = true;
 	TouchItem.FingerIndex = FingerIndex;
@@ -360,7 +358,29 @@ void ALevels_v0Character::UpdateHealth(float HealthChange)
 	HealthPercentage = Health / FullHealth;
 }
 
+void ALevels_v0Character::AimIn() {
+	if (auto FPC = GetFirstPersonCameraComponent()) { // set First person camera to the component in UE4
+		FPC->SetFieldOfView(75.0f); // set camera view to 75
+		isZoomedIn = true; // set boolean to true (for GUI DEV)
+	}
+}
 
+void ALevels_v0Character::AimOut() {
+	if (auto FPC = GetFirstPersonCameraComponent()) { // set First person camera to the component in UE4
+		FPC->SetFieldOfView(90.0f); // set camera view back to 90
+		isZoomedIn = false; // set boolean to false (for GUI DEV)
+	}
+}
+
+
+void ALevels_v0Character::EndFire() {
+	GetWorldTimerManager().ClearTimer(TimerHandle_HandleRefire);
+}
+
+void ALevels_v0Character::StartFire() {
+	Fire();
+	GetWorldTimerManager().SetTimer(TimerHandle_HandleRefire, this, &ALevels_v0Character::Fire, TimeBetweenShots, true);
+}
 
 
 
