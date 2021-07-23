@@ -14,6 +14,7 @@ ALevels_v0HUD::ALevels_v0HUD()
 	static ConstructorHelpers::FObjectFinder<UTexture2D> CrosshairTexObj(TEXT("/Game/FirstPerson/Textures/FirstPersonCrosshair"));
 	CrosshairTex = CrosshairTexObj.Object;
 
+	// Sets the UI for healthbar and speed meter
 	static ConstructorHelpers::FClassFinder<UUserWidget> HealthBarObj(TEXT("/Game/FirstPerson/UI/Health_UI"));
 	HUDWidgetClass = HealthBarObj.Class;
 }

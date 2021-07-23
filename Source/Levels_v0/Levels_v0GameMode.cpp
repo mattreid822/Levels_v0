@@ -19,6 +19,7 @@ ALevels_v0GameMode::ALevels_v0GameMode()
 	static ConstructorHelpers::FClassFinder<APawn> PlayerPawnClassFinder(TEXT("/Game/FirstPersonCPP/Blueprints/FirstPersonCharacter"));
 	DefaultPawnClass = PlayerPawnClassFinder.Class;
 
+	// Sets the healthbar and speed meter as UI
 	static ConstructorHelpers::FClassFinder<UUserWidget> HealthBar(TEXT("/Game/FirstPerson/UI/Health_UI"));
 	HUDWidgetClass = HealthBar.Class;
 

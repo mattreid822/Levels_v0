@@ -130,6 +130,10 @@ void ALevels_v0Character::SetupPlayerInputComponent(class UInputComponent* Playe
 	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
 
+	// Bind crouch events
+	PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &ALevels_v0Character::CrouchStart);
+	PlayerInputComponent->BindAction("Crouch", IE_Released, this, &ALevels_v0Character::CrouchEnd);
+
 	// Bind fire event
 	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &ALevels_v0Character::OnFire);
 
@@ -312,17 +316,20 @@ bool ALevels_v0Character::EnableTouchscreenMovement(class UInputComponent* Playe
 	return false;
 }
 
+/** Get's the current percentage of health for the UI's healthbar */
 float ALevels_v0Character::GetHealth()
 {
 	return HealthPercentage;
 }
 
+/** Get's the current percentage of speed for the UI's speed meter */
 float ALevels_v0Character::GetSpeed()
 {
 	SpeedPercentage = GetVelocity().Size() / CharacterMovement->MaxWalkSpeed;
 	return SpeedPercentage;
 }
 
+/** Get's the current health for the UI's healthbar as an integer in text */
 FText ALevels_v0Character::GetHealthIntText()
 {
 	int32 HP = FMath::RoundHalfFromZero(HealthPercentage * 100);
@@ -332,6 +339,7 @@ FText ALevels_v0Character::GetHealthIntText()
 	return HPText;
 }
 
+/** Get's the current speed for the UI's speed meter as an integer in text */
 FText ALevels_v0Character::GetSpeedIntText()
 {
 	//this line was a cool algorithm to get the velocity when about to wallrun
@@ -346,21 +354,35 @@ FText ALevels_v0Character::GetSpeedIntText()
 
 }
 
-
+/** Not yet implemented. Updates the amount of current health by subracting the amount of damager from the source */
 float ALevels_v0Character::TakeDamage(float DamageAmount, struct FDamageEvent const & DamageEvent, class AController * EventInstigator, AActor * DamageCauser)
 {
 	UpdateHealth(-DamageAmount);
 	return DamageAmount;
 }
 
-
+/** Updates health */
 void ALevels_v0Character::UpdateHealth(float HealthChange)
 {
 	Health = FMath::Clamp(Health += HealthChange, 0.0f, FullHealth);
 	HealthPercentage = Health / FullHealth;
 }
 
+/** Start crouch */
+void ALevels_v0Character::CrouchStart()
+{
+	//Log(ELogLevel::WARNING, __FUNCTION__);
 
+	Crouch();
+}
+
+/** End crouch */
+void ALevels_v0Character::CrouchEnd()
+{
+	//Log(ELogLevel::WARNING, __FUNCTION__);
+
+	UnCrouch();
+}
 
 
 
