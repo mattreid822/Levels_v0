@@ -9,18 +9,20 @@
 #include "GameFramework/InputSettings.h"
 #include "HeadMountedDisplayFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
+//#include "Kismet/KismetMathLibrary.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "MotionControllerComponent.h"
 #include "XRMotionControllerBase.h" // for FXRMotionControllerBase::RightHandSourceId
-#include "TimerManager.h"
-#include "Components/TimelineComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "LevelsPlayerMovementComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFPChar, Warning, All);
 
 //////////////////////////////////////////////////////////////////////////
 // ALevels_v0Character
 
-ALevels_v0Character::ALevels_v0Character()
+ALevels_v0Character::ALevels_v0Character(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<ULevelsPlayerMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 
 	// Set size for collision capsule
@@ -99,8 +101,7 @@ void ALevels_v0Character::BeginPlay()
 	HealthPercentage = 1.0f;
 	//bCanBeDamaged = true;
 
-	
-
+	CharacterMovement = Cast<ULevelsPlayerMovementComponent>(GetCharacterMovement());
 
 	//Attach gun mesh component to Skeleton, doing it here because the skeleton is not yet created in the constructor
 	FP_Gun->AttachToComponent(Mesh1P, FAttachmentTransformRules(EAttachmentRule::SnapToTarget, true), TEXT("GripPoint"));
@@ -127,8 +128,8 @@ void ALevels_v0Character::SetupPlayerInputComponent(class UInputComponent* Playe
 	check(PlayerInputComponent);
 
 	// Bind jump events
-	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
-	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
+	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ALevels_v0Character::JumpPressed);
+	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ALevels_v0Character::StopJumping);
 
 	// Bind crouch events
 	PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &ALevels_v0Character::CrouchStart);
@@ -139,7 +140,7 @@ void ALevels_v0Character::SetupPlayerInputComponent(class UInputComponent* Playe
 	PlayerInputComponent->BindAction("Fire", IE_Released, this, &ALevels_v0Character::EndFire);
 
 	// Zoom in/out
-	PlayerInputComponent->BindAction("ZoomIn", IE_Pressed, this, &ALevels_v0Character::AimIn); 
+	PlayerInputComponent->BindAction("ZoomIn", IE_Pressed, this, &ALevels_v0Character::AimIn);
 	PlayerInputComponent->BindAction("ZoomIn", IE_Released, this, &ALevels_v0Character::AimOut);
 	// Enable touchscreen input
 	EnableTouchscreenMovement(PlayerInputComponent);
@@ -157,9 +158,11 @@ void ALevels_v0Character::SetupPlayerInputComponent(class UInputComponent* Playe
 	PlayerInputComponent->BindAxis("TurnRate", this, &ALevels_v0Character::TurnAtRate);
 	PlayerInputComponent->BindAxis("LookUp", this, &APawn::AddControllerPitchInput);
 	PlayerInputComponent->BindAxis("LookUpRate", this, &ALevels_v0Character::LookUpAtRate);
+
+	PlayerInputComponent->BindAction("Sprint", EInputEvent::IE_Pressed, this, &ALevels_v0Character::SprintPressed);
+	PlayerInputComponent->BindAction("Sprint", EInputEvent::IE_Released, this, &ALevels_v0Character::SprintReleased);
+
 }
-
-
 
 void ALevels_v0Character::Fire()
 {
@@ -310,7 +313,7 @@ bool ALevels_v0Character::EnableTouchscreenMovement(class UInputComponent* Playe
 		//PlayerInputComponent->BindTouch(EInputEvent::IE_Repeat, this, &ALevels_v0Character::TouchUpdate);
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -364,20 +367,6 @@ void ALevels_v0Character::UpdateHealth(float HealthChange)
 	HealthPercentage = Health / FullHealth;
 }
 
-void ALevels_v0Character::CrouchStart()
-{
-	//Log(ELogLevel::WARNING, __FUNCTION__);
-
-	Crouch();
-}
-
-void ALevels_v0Character::CrouchEnd()
-{
-	//Log(ELogLevel::WARNING, __FUNCTION__);
-
-	UnCrouch();
-}
-
 void ALevels_v0Character::AimIn() {
 	if (auto FPC = GetFirstPersonCameraComponent()) { // set First person camera to the component in UE4
 		FPC->SetFieldOfView(75.0f); // set camera view to 75
@@ -401,5 +390,38 @@ void ALevels_v0Character::StartFire() {
 	GetWorldTimerManager().SetTimer(TimerHandle_HandleRefire, this, &ALevels_v0Character::Fire, TimeBetweenShots, true);
 }
 
+void ALevels_v0Character::CrouchStart()
+{
+	CharacterMovement->CrouchStart();
+}
 
+void ALevels_v0Character::CrouchEnd()
+{
+	CharacterMovement->CrouchEnd();
+}
 
+void ALevels_v0Character::JumpPressed()
+{
+	//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Jump"));
+	//If player can wall jump, wall jump
+	CharacterMovement->WallRunJump();
+	//If player can jump run a ledge grab, jump backwards off the wall
+	CharacterMovement->LedgeGrabJump();
+	Super::Jump();
+	
+}
+
+void ALevels_v0Character::JumpReleased()
+{
+	Super::StopJumping();
+}
+
+void ALevels_v0Character::SprintPressed()
+{
+
+}
+
+void ALevels_v0Character::SprintReleased()
+{
+	
+}

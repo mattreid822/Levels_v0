@@ -51,4 +51,6 @@ private:
 
 	/**Handle any function calls that rely upon changing the playing state of our game */
 	void HandleNewState(EGamePlayState NewState);
+
+	virtual void StartPlay() override;
 };

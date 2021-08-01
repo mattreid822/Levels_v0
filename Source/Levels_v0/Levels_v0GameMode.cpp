@@ -95,3 +95,17 @@ void ALevels_v0GameMode::HandleNewState(EGamePlayState NewState)
 	break;
 	}
 }
+
+
+//test of overriding the startplay method. 
+//BeginPlay is an event that gets called at the beginning of a level being opened. Start Play is a function you can call with GameModes
+void ALevels_v0GameMode::StartPlay()
+{
+	Super::StartPlay();
+
+	check(GEngine != nullptr);
+
+	// Display a debug message for five seconds. 
+	// The -1 "Key" value argument prevents the message from being updated or refreshed.
+	//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Hello World, this is Levels!"));
+}

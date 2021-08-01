@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "Components/TimelineComponent.h"
+#include "TimerManager.h"
 #include "Levels_v0Character.generated.h"
 
 class UInputComponent;
@@ -14,8 +14,9 @@ class UCameraComponent;
 class UMotionControllerComponent;
 class UAnimMontage;
 class USoundBase;
+class ULevelsPlayerMovementComponent;
 
-UCLASS(config=Game)
+UCLASS(config = Game)
 class ALevels_v0Character : public ACharacter
 {
 	GENERATED_BODY()
@@ -52,13 +53,28 @@ class ALevels_v0Character : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 		UMotionControllerComponent* L_MotionController;
 
+
 public:
-	ALevels_v0Character();
+	
+	ALevels_v0Character(const FObjectInitializer& ObjectInitializer);
+
 
 protected:
-	virtual void BeginPlay();
 
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
+public:
+	// Called every frame
 	//virtual void Tick(float DeltaTime) override;
+
+	void JumpPressed();
+	void JumpReleased();
+
+	void SprintPressed();
+	void SprintReleased();
+
+protected:
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const & DamageEvent, class AController * EventInstigator, AActor * DamageCauser);
 
@@ -91,7 +107,7 @@ public:
 
 	// time to wait (in seconds) between shots
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
-	float TimeBetweenShots;
+		float TimeBetweenShots;
 
 	// muzzle flash for shooting gun
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
@@ -132,7 +148,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Health")
 		float GetHealth();
 
-	/** Get Magic */
+	/** Get Speed */
 	UFUNCTION(BlueprintPure, Category = "Speed")
 		float GetSpeed();
 
@@ -145,13 +161,11 @@ public:
 		FText GetSpeedIntText();
 
 	/** Makes a variable that references the character's current movement */
-	class UCharacterMovementComponent* CharacterMovement = GetCharacterMovement();
+	ULevelsPlayerMovementComponent* CharacterMovement;
 
 	/** Not yet implemented. Updates health */
 	UFUNCTION(BlueprintCallable, Category = "Power")
 		void UpdateHealth(float HealthChange);
-
-	//Movement
 
 	/** Start crouch state */
 	UFUNCTION()
@@ -160,7 +174,6 @@ public:
 	/** End crouch state */
 	UFUNCTION()
 		void CrouchEnd();
-
 
 protected:
 
