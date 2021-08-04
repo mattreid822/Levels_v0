@@ -37,6 +37,13 @@ void ULevelsPlayerMovementComponent::WallMovementCheck()
 	if (bMantleEnabled) {
 		MantleMovement();
 	}
+	if (bSprintEnabled) {
+		SprintUpdate();
+	}
+	if (bSlidingEnabled)
+	{
+		SlideUpdate();
+	}
 }
 
 void ULevelsPlayerMovementComponent::BeginPlay()
@@ -45,9 +52,19 @@ void ULevelsPlayerMovementComponent::BeginPlay()
 
 	GetWorld()->GetTimerManager().SetTimer(WallRunTimerHandle, this, &ULevelsPlayerMovementComponent::WallMovementCheck, 0.0167f, true);
 
+	//sets a timer to check if the camera rotation should be changed based on the custom movement mode. Could just be called in wall movement check but its here for now
 	FTimerDelegate TimerDel;
 	TimerDel.BindUFunction(this, FName("MovementCamera"), MovementCameraRoll);
 	GetWorld()->GetTimerManager().SetTimer(CameraTimerHandle, TimerDel, 0.0167f, true);
+
+	//save default values so we can change them back
+	DefaultGravity = GravityScale;
+	DefaultGroundFriction = GroundFriction;
+	DefaultBrakingDeceleration = BrakingDecelerationWalking;
+	DefaultWalkSpeed = MaxWalkSpeed;
+	DefaultCrouchSpeed = MaxWalkSpeedCrouched;
+
+
 
 }
 
@@ -55,7 +72,8 @@ void ULevelsPlayerMovementComponent::TickComponent(float DeltaTime, ELevelTick T
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	//UE_LOG(LogTemp, Warning, TEXT("Test: %d"), CustomMovementMode);
+	UE_LOG(LogTemp, Warning, TEXT("Test: %d"), CustomMovementMode);
+	UE_LOG(LogTemp, Warning, TEXT("Bool value is: %s"), bSlidingEnabled ? "e" : "f a l s e");
 }
 
 void ULevelsPlayerMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode)
@@ -65,8 +83,21 @@ void ULevelsPlayerMovementComponent::OnMovementModeChanged(EMovementMode Previou
 
 	if (PreviousMovementMode == MOVE_Walking && IsFalling())
 	{
-		EnableWallRun();
+		//EnableWallRun();
 		EnableWallClimb();
+		EnableSlide();
+		EnableSprint();
+		SprintJump();
+		if (PreviousCustomMode == MOVE_Sprint)
+			bWantsToSprint = true;
+		WallRunEnd(0.35f);
+		WallClimbEnd(0.0f);
+		SlideEnd(false);
+	}
+	else if (PreviousMovementMode == MOVE_Falling && IsWalking())
+	{
+		//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Queued Movement!!"));
+		//CheckQueuedMovement();
 	}
 }
 
@@ -75,23 +106,64 @@ void ULevelsPlayerMovementComponent::ProcessLanded(const FHitResult & Hit, float
 	Super::ProcessLanded(Hit, remainingTime, Iterations);
 	DisableWallRun();
 	DisableWallClimb();
+	DisableSlide();
+	DisableSprint();
+	WallRunEnd(0.35f);
+	WallClimbEnd(0.0f);
+	SprintEnd();
+	SlideEnd(false);
+	CheckQueuedMovement();
 	//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Camera Shake!!"));
 	//GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(JumpLandShake, 1, ECameraAnimPlaySpace::CameraLocal, FRotator(0, 0, 0));
 	GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(JumpLandShake);
 }
 
-bool ULevelsPlayerMovementComponent::DoJump(bool bReplayingMoves)
+void ULevelsPlayerMovementComponent::OnJump()
 {
-	if (CustomMovementMode == MOVE_CustomNone && IsFalling())
+;
+	if (CustomMovementMode == MOVE_CustomNone)
 	{
-		EnableWallRun();
-		EnableWallClimb();
+		if (!IsFalling())
+		{
+			EnableWallRun();
+			EnableWallClimb();
+			EnableSprint();
+			EnableSlide();
+			GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(JumpLandShake);
+		}
 	}
+	else
+	{
+		WallRunJump();
+		LedgeGrabJump();
+		SlideJump();
+		CrouchJump();
+		SprintJump();
+	}
+	//GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(JumpLandShake);
+}
+
+//bool ULevelsPlayerMovementComponent::DoJump(bool bReplayingMoves)
+//{
+	//if (CustomMovementMode == MOVE_CustomNone && IsFalling())
+	//{
+	//	if (IsFalling())
+	//	{
+	//		EnableWallRun();
+	//		EnableWallClimb();
+	//		EnableSprint();
+	//		EnableSlide();
+	//		SlideJump();
+	//		CrouchJump();
+	//		SprintJump();
+	//	}
+	//}
+
 	//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Camera Shake!!"));
 	//GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(JumpLandShake);
-	GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(JumpLandShake);
-	return Super::DoJump(bReplayingMoves);
-}
+	//GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(JumpLandShake);
+	//return Super::DoJump(bReplayingMoves);
+//}
 
 bool ULevelsPlayerMovementComponent::SetCustomMovementMode(uint8 NewCustomMovementMode)
 {
@@ -101,10 +173,12 @@ bool ULevelsPlayerMovementComponent::SetCustomMovementMode(uint8 NewCustomMoveme
 	}
 	else
 	{
-		if (NewCustomMovementMode == MOVE_RightWallRun || NewCustomMovementMode == MOVE_LeftWallRun || IsWallRunning())
-		{
-			bChangeCamera = true;
-		}
+		//if (NewCustomMovementMode == MOVE_RightWallRun || NewCustomMovementMode == MOVE_LeftWallRun || IsWallRunning())
+		//{
+		//	bChangeCamera = true;
+		//}
+		//	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Returning max movement speed to normal!!"));
+		//}
 		CustomMovementMode = NewCustomMovementMode;
 		ResetMovement();
 		return true;
@@ -115,10 +189,22 @@ void ULevelsPlayerMovementComponent::ResetMovement()
 {
 	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("Resetting Movement")));
 	//if equal to null
-	if (CustomMovementMode == MOVE_CustomNone)
+
+
+	if (CustomMovementMode == MOVE_CustomNone || CustomMovementMode == MOVE_Crouch)
 	{
 		GravityScale = DefaultGravity;
+		GroundFriction= DefaultGroundFriction;
+		BrakingDecelerationWalking = DefaultBrakingDeceleration;
+		MaxWalkSpeed = DefaultWalkSpeed;
+		MaxWalkSpeedCrouched = DefaultCrouchSpeed;
+
+		SetPlaneConstraintEnabled(false);
+
 		switch (CustomMovementMode) {
+		case MOVE_CustomNone:
+			SetMovementMode(MOVE_Walking);
+			break;
 		case MOVE_Slide:
 			SetMovementMode(MOVE_Walking);
 			break;
@@ -140,15 +226,28 @@ void ULevelsPlayerMovementComponent::ResetMovement()
 		case MOVE_Sprint:
 			SetMovementMode(MOVE_Walking);
 			break;
-		default:
-			SetMovementMode(MOVE_Falling);
+		case MOVE_Crouch:
+			SetMovementMode(MOVE_Walking);
+			break;
 		}
+	}
+}
+
+void ULevelsPlayerMovementComponent::CheckQueuedMovement()
+{
+	if (bWantsToSlide)
+	{
+		SlideStart();
+	}
+	else if (bWantsToSprint)
+	{
+		SprintStart();
 	}
 }
 
 void ULevelsPlayerMovementComponent::MovementCamera(float Roll)
 {
-	if (bChangeCamera) {
+	//if (bChangeCamera) {
 		//tilts camera in direction of wall run or slide
 		if (CustomMovementMode == MOVE_RightWallRun || IsSliding())
 		{
@@ -166,7 +265,7 @@ void ULevelsPlayerMovementComponent::MovementCamera(float Roll)
 		}
 		//this was an attemp to optimize but broke the smooth camera transition with RInterpTo in camera tilt
 		//bChangeCamera = false;
-	}
+	//}
 }
 
 
@@ -182,7 +281,7 @@ void ULevelsPlayerMovementComponent::PhysWalking(float deltaTime, int32 Iteratio
 {
 	//Increases speed at the start of walking. Done by increasing acceleration when the character's velocity is below 500 (can be changed) units/s 
 	//makes the game feel faster :)
-	if (Velocity.Size2D() < 500.f)
+	if (Velocity.Size2D() < 700.f)
 	{
 		//takes normal of the current accelleration vector and multiplies it by 2048
 		Acceleration = Acceleration.GetSafeNormal() * 2048.0f;
@@ -190,9 +289,9 @@ void ULevelsPlayerMovementComponent::PhysWalking(float deltaTime, int32 Iteratio
 	Super::PhysWalking(deltaTime, Iterations);
 }
 
-float ULevelsPlayerMovementComponent::ForwardInput()
+bool ULevelsPlayerMovementComponent::ForwardInput()
 {
-	return FVector::DotProduct(CharacterOwner->GetActorForwardVector(), GetLastInputVector());
+	return FVector::DotProduct(CharacterOwner->GetActorForwardVector(), GetLastInputVector()) > 0.f;
 }
 
 bool ULevelsPlayerMovementComponent::MovingForward()
@@ -367,6 +466,7 @@ void ULevelsPlayerMovementComponent::EnableWallRun()
 
 void ULevelsPlayerMovementComponent::DisableWallRun()
 {
+	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Disabled Wall Run")));
 	bWallRunEnabled = false;
 }
 
@@ -379,6 +479,7 @@ void ULevelsPlayerMovementComponent::WallRunEnd(float Cooldown)
 	//Set a cooldown on wallrunning
 	DisableWallRun();
 	GetWorld()->GetTimerManager().SetTimer(WallRunCooldownTimerHandle, this, &ULevelsPlayerMovementComponent::EnableWallRun, Cooldown, true);
+	GetWorld()->GetTimerManager().SetTimer(QueueTimerHandle, this, &ULevelsPlayerMovementComponent::CheckQueuedMovement, Cooldown, true);
 }
 
 void ULevelsPlayerMovementComponent::WallClimbUpdate()
@@ -388,13 +489,12 @@ void ULevelsPlayerMovementComponent::WallClimbUpdate()
 		FHitResult Hit(ForceInit);
 		MantleVectors();
 
-		//EDrawDebugTrace::None for debug lines
+		//EDrawDebugTrace:: for debug lines
 		if (UKismetSystemLibrary::CapsuleTraceSingle(GetWorld(), MantleEyeLevel, MantleFeetLevel, 20.f, 10.f, UEngineTypes::ConvertToTraceType(ECC_Visibility), false, ActorArray, EDrawDebugTrace::None, Hit, true, FLinearColor::Green, FLinearColor::Red, 7.0f))
 		{
 			MantleTraceDistance = Hit.Distance;
 			if (IsWalkable(Hit))
 			{
-				//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Got past Walkable()")));
 				MantlePosition = Hit.ImpactPoint + FVector(0.f, 0.f, CharacterOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 				DisableWallClimb();
 				if (SetCustomMovementMode(MOVE_LedgeGrab))
@@ -441,7 +541,8 @@ void ULevelsPlayerMovementComponent::WallClimbUpdate()
 bool ULevelsPlayerMovementComponent::WallClimbMovement()
 {
 	FHitResult Hit(ForceInit);
-	if (ForwardInput() > 0.f && GetWorld()->LineTraceSingleByChannel(Hit, MantleEyeLevel, CharacterOwner->GetActorForwardVector() * 50 + MantleFeetLevel, ECC_Visibility))
+	//DrawDebugLine(GetWorld(), MantleEyeLevel, CharacterOwner->GetActorForwardVector() * 50 + MantleFeetLevel, FColor::Green, false, 7.0f);
+	if (ForwardInput() && GetWorld()->LineTraceSingleByChannel(Hit, MantleEyeLevel, CharacterOwner->GetActorForwardVector() * 50 + MantleFeetLevel, ECC_Visibility))
 	{
 		WallClimbHitNormal = Hit.Normal;
 		SetCustomMovementMode(MOVE_WallClimb);
@@ -459,7 +560,7 @@ bool ULevelsPlayerMovementComponent::WallClimbMovement()
 
 bool ULevelsPlayerMovementComponent::CanWallClimb()
 {
-	if(ForwardInput() > 0.f && IsFalling() && (CustomMovementMode == MOVE_CustomNone || CustomMovementMode == MOVE_WallClimb || IsWallRunning()))
+	if(ForwardInput() && IsFalling() && (CustomMovementMode == MOVE_CustomNone || CustomMovementMode == MOVE_WallClimb || IsWallRunning()))
 	{
 		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Can Wall Climb")));
 		return true;
@@ -491,6 +592,7 @@ void ULevelsPlayerMovementComponent::WallClimbEnd(float Cooldown)
 			DisableMantleCheck();
 			MantleTraceDistance = 0.f;
 			GetWorld()->GetTimerManager().SetTimer(WallClimbCooldownTimerHandle, this, &ULevelsPlayerMovementComponent::EnableWallClimb, Cooldown, false);
+			GetWorld()->GetTimerManager().SetTimer(QueueTimerHandle, this, &ULevelsPlayerMovementComponent::CheckQueuedMovement, Cooldown, true);
 		}
 			
 	}
@@ -499,7 +601,7 @@ void ULevelsPlayerMovementComponent::WallClimbEnd(float Cooldown)
 bool ULevelsPlayerMovementComponent::MantleCheck()
 {
 	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Quick Mantle Bool %s"), (QuickMantle() ? TEXT("true") : TEXT("false"))));
-	if (ForwardInput() > 0.f && (CustomMovementMode == MOVE_LedgeGrab || QuickMantle()))
+	if (ForwardInput() && (CustomMovementMode == MOVE_LedgeGrab || QuickMantle()))
 	{
 		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Mantle Check passed")));
 		return true;
@@ -587,53 +689,232 @@ bool ULevelsPlayerMovementComponent::IsSliding()
 	return false;
 }
 
-void ULevelsPlayerMovementComponent::CrouchStart()
+void ULevelsPlayerMovementComponent::SlideUpdate()
 {
-	//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Crouch"));
-	Crouch();
+	if (CustomMovementMode == MOVE_Slide)
+	{
+		if (Velocity.Size() <= 350.f)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Slide Update")));
+			SlideEnd(true);
+		}
+	}
 }
 
-void ULevelsPlayerMovementComponent::CrouchEnd()
+void ULevelsPlayerMovementComponent::SlideJump()
 {
-	UnCrouch();
+	if (CustomMovementMode == MOVE_Slide)
+	{
+		SlideEnd(false);
+
+	}
+}
+
+void ULevelsPlayerMovementComponent::EnableSlide()
+{
+	bSlidingEnabled = true;
+}
+
+void ULevelsPlayerMovementComponent::DisableSlide()
+{
+	bSlidingEnabled = false;
+}
+
+bool ULevelsPlayerMovementComponent::CanSlide()
+{
+	if ((CustomMovementMode == MOVE_Sprint || bWantsToSprint) && MovingForward())
+	{
+		return true;
+	}
+	return false;
 }
 
 void ULevelsPlayerMovementComponent::SlideStart()
 {
+	if (CanSlide() && IsWalking())
+	{
+		SprintEnd();
+		SetCustomMovementMode(MOVE_Slide);
+		Crouch(true);
+		GroundFriction = 0.f;
+		BrakingDecelerationWalking = 1400.f;
+		MaxWalkSpeed = 0.f;
+		SetPlaneConstraintFromVectors(Velocity.GetSafeNormal(), CharacterOwner->GetActorUpVector());
+		SetPlaneConstraintEnabled(true);
+		FHitResult Hit(ForceInit);
+		FVector SlideVector;
+		DrawDebugLine(GetWorld(), CharacterOwner->GetActorLocation(), (CharacterOwner->GetActorUpVector() * -200) + CharacterOwner->GetActorLocation(), FColor::Green, false, 7.0f);
+		GetWorld()->LineTraceSingleByChannel(Hit, CharacterOwner->GetActorLocation(), (CharacterOwner->GetActorUpVector() * -200) + CharacterOwner->GetActorLocation(), ECC_Visibility);
+		SlideVector = FVector::CrossProduct(CharacterOwner->GetActorUpVector(), Hit.ImpactNormal) * -1.0f;
+		
+		//FString GravString = FString::SanitizeFloat(GravityScale);
+
+		if (SlideVector.Z <= .02f)
+		{
+			FString SlideString = SlideVector.ToString();
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, *SlideString);
+			AddImpulse(SlideImpulseForce * SlideVector, true);
+		}
+		EnableSlide();
+		bWantsToSlide = false;
+		bWantsToSprint = false;
+	}
+}
+
+void ULevelsPlayerMovementComponent::SlideEnd(bool CrouchAfter)
+{
+	if (CustomMovementMode == MOVE_Slide)
+	{
+		if (CrouchAfter)
+		{
+			Crouch(true);
+			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Crouch"));
+			SetCustomMovementMode(MOVE_Crouch);
+			MaxWalkSpeed = 300.f;
+			
+		}
+		else
+		{
+			SetCustomMovementMode(MOVE_CustomNone);
+			UnCrouch();
+		}
+		DisableSlide();
+	}
+}
+
+void ULevelsPlayerMovementComponent::CrouchSlideCheck()
+{
+	if (CustomMovementMode == MOVE_LedgeGrab || CustomMovementMode == MOVE_WallClimb || CustomMovementMode == MOVE_Mantle)
+	{
+		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Ledge grab jump")));
+		WallClimbEnd(0.5f);
+	}
+	else if (IsWallRunning())
+	{
+		WallRunEnd(0.5f);
+	}
+	else if (!CanSlide())
+	{
+		if (CustomMovementMode == MOVE_CustomNone)
+		{
+			CrouchStart();
+		}
+		else if (CustomMovementMode == MOVE_Crouch)
+		{
+			CrouchEnd();
+		}
+	}
+	else if (IsWalking())
+	{
+		SlideStart();
+	}
+
+	bWantsToSlide = true;
+}
+
+void ULevelsPlayerMovementComponent::CrouchJump()
+{
+	if (CustomMovementMode == MOVE_Crouch)
+	{
+		CrouchEnd();
+	}
+}
+
+void ULevelsPlayerMovementComponent::CrouchStart()
+{
+	if (CustomMovementMode == MOVE_CustomNone)
+	{
+		Crouch(true);
+		//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Crouch"));
+		SetCustomMovementMode(MOVE_Crouch);
+		MaxWalkSpeed = 300.f;
+		bWantsToSlide = false;
+		bWantsToSprint = false;
+	}
 
 }
 
-void ULevelsPlayerMovementComponent::SlideEnd()
+void ULevelsPlayerMovementComponent::CrouchEnd()
 {
+	if (CustomMovementMode == MOVE_Crouch)
+	{
+		UnCrouch(true);
+		SetCustomMovementMode(MOVE_CustomNone);
+		bWantsToSlide = false;
+		bWantsToSprint = false;
+	}
 
+}
+
+void ULevelsPlayerMovementComponent::SprintUpdate()
+{
+	if (!(CustomMovementMode == MOVE_Sprint && ForwardInput()))
+	{
+		//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Sprint Update (END)"));
+		SprintEnd();
+	}
+}
+
+void ULevelsPlayerMovementComponent::EnableSprint()
+{
+	bSprintEnabled = true;
+}
+
+void ULevelsPlayerMovementComponent::DisableSprint()
+{
+	bSprintEnabled = false;
+}
+
+void ULevelsPlayerMovementComponent::SprintStart()
+{
+	//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Sprint Start"));
+	CrouchEnd();
+	SlideEnd(false);
+	if (CustomMovementMode == MOVE_CustomNone && IsWalking()) 
+	{
+		//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Sprint Start2"));
+		if (SetCustomMovementMode(MOVE_Sprint))
+		{
+			//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Sprint Start3"));
+			MaxWalkSpeed = SprintSpeed;
+			EnableSprint();
+			bWantsToSlide = false;
+			bWantsToSprint = false;
+		}
+	}
+}
+
+void ULevelsPlayerMovementComponent::SprintEnd()
+{
+	if (CustomMovementMode == MOVE_Sprint)
+	{
+		if (SetCustomMovementMode(MOVE_CustomNone))
+		{
+		//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Sprint End!!"));
+		//MaxWalkSpeed /= SprintSpeedMultiplier;
+		DisableSprint();
+		//GetWorld()->GetTimerManager().SetTimer(SprintCooldownTimerHandle, this, &ULevelsPlayerMovementComponent::EnableSprint, .1f, false);
+		}
+	}
+}
+
+void ULevelsPlayerMovementComponent::SprintJump()
+{
+	if (CustomMovementMode == MOVE_Sprint)
+	{
+		//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Sprint Jump"));
+		SprintEnd();
+		bWantsToSprint = true;
+	}
 }
 
 void ULevelsPlayerMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
 {
-
-	if (CustomMovementMode == ECustomMovementMode::MOVE_Slide)
-	{
-		PhysSlide(deltaTime, Iterations);
-	}
-	if (CustomMovementMode == ECustomMovementMode::MOVE_Sprint)
-	{
-		PhysSprint(deltaTime, Iterations);
-	}
 	Super::PhysCustom(deltaTime, Iterations);
 }
 
-void ULevelsPlayerMovementComponent::PhysSprint(float deltaTime, int32 Iterations)
-{
-
-}
-
-void ULevelsPlayerMovementComponent::PhysSlide(float deltaTime, int32 Iterations)
-{
-	
-}
 
 void ULevelsPlayerMovementComponent::OnMovementUpdated(float DeltaSeconds, const FVector & OldLocation, const FVector & OldVelocity)
 {
-
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
 }

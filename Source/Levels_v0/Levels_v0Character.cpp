@@ -392,23 +392,19 @@ void ALevels_v0Character::StartFire() {
 
 void ALevels_v0Character::CrouchStart()
 {
-	CharacterMovement->CrouchStart();
+	CharacterMovement->CrouchSlideCheck();
 }
 
 void ALevels_v0Character::CrouchEnd()
 {
-	CharacterMovement->CrouchEnd();
+	//CharacterMovement->CrouchEnd();
+	CharacterMovement->CrouchSlideCheck();
 }
 
 void ALevels_v0Character::JumpPressed()
 {
-	//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Jump"));
-	//If player can wall jump, wall jump
-	CharacterMovement->WallRunJump();
-	//If player can jump run a ledge grab, jump backwards off the wall
-	CharacterMovement->LedgeGrabJump();
+	CharacterMovement->OnJump();
 	Super::Jump();
-	
 }
 
 void ALevels_v0Character::JumpReleased()
@@ -418,10 +414,11 @@ void ALevels_v0Character::JumpReleased()
 
 void ALevels_v0Character::SprintPressed()
 {
-
+	CharacterMovement->SprintStart();
 }
 
 void ALevels_v0Character::SprintReleased()
 {
-	
+	//This is so you don't have to hold shift to sprint. It feels better
+	//CharacterMovement->SprintEnd();
 }

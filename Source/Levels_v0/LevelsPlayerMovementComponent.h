@@ -23,7 +23,8 @@ enum ECustomMovementMode
 	MOVE_WallClimb = 4,
 	MOVE_LedgeGrab = 5,
 	MOVE_Mantle = 6,
-	MOVE_Sprint = 7
+	MOVE_Sprint = 7,
+	MOVE_Crouch = 8
 };
 
 UCLASS()
@@ -50,7 +51,7 @@ public:
 
 	virtual void ProcessLanded(const FHitResult& Hit, float remainingTime, int32 Iterations) override;
 
-	virtual bool DoJump(bool bReplayingMoves) override;
+	//virtual bool DoJump(bool bReplayingMoves) override;
 
 
 
@@ -88,7 +89,12 @@ protected:
 	bool bWallClimbEnabled = false;
 	bool bMantleEnabled = false;
 	bool bMantleCheckEnabled = false;
+	bool bSprintEnabled = false;
+	bool bCrouchEnabled = false;
 	bool bChangeCamera = false;
+	bool bWantsToSprint = false;
+	bool bWantsToSlide = false;
+	bool bSlidingEnabled = false;
 
 	//timer handles
 	FTimerHandle WallRunCooldownTimerHandle;
@@ -96,11 +102,17 @@ protected:
 	FTimerHandle CameraTimerHandle;
 	FTimerHandle WallClimbCooldownTimerHandle;
 	FTimerHandle MantleCooldownTimerHandle;
+	FTimerHandle SprintCooldownTimerHandle;
+	FTimerHandle QueueTimerHandle;
 	FRotator CurrentRotation;
 	TArray<AActor*, FDefaultAllocator> ActorArray;
 
 	//set default gravity scale value to a variable
-	float DefaultGravity = GravityScale;
+	float DefaultGravity;
+	float DefaultGroundFriction;
+	float DefaultBrakingDeceleration;
+	float DefaultWalkSpeed;
+	float DefaultCrouchSpeed;
 
 #pragma endregion
 
@@ -108,6 +120,18 @@ public:
 
 
 	ULevelsPlayerMovementComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+	/** Changes current custom movement */
+	UFUNCTION()
+		bool SetCustomMovementMode(uint8 NewCustomMovementMode);
+
+	/** Resets movement state based on the current movement state */
+	UFUNCTION()
+		void ResetMovement();
+
+	/** Resets movement state based on the current movement state */
+	UFUNCTION()
+		void CheckQueuedMovement();
 
 	//the roll of the camera when wall jumping
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Wall Run")
@@ -125,9 +149,9 @@ public:
 	UFUNCTION()
 		void WallMovementCheck();
 
-	//gets if the player is inputting forward by returning a float (positive) for true (will change to bool later)
+	//gets if the player is inputting forward
 	UFUNCTION()
-		float ForwardInput();
+		bool ForwardInput();
 
 	//Returns if the player's forward velocity is positive
 	UFUNCTION()
@@ -156,22 +180,6 @@ public:
 	/** End wall run state */
 	UFUNCTION()
 		void WallRunEnd(float Cooldown);
-
-	/** Start crouch state */
-	UFUNCTION()
-		void CrouchStart();
-
-	/** End crouch state */
-	UFUNCTION()
-		void CrouchEnd();
-
-	/** Start slide state */
-	UFUNCTION()
-		void SlideStart();
-
-	/** End slide state */
-	UFUNCTION()
-		void SlideEnd();
 
 	//the gravity of the player when wall running
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Wall Run")
@@ -305,13 +313,82 @@ public:
 	UFUNCTION()
 		bool IsSliding();
 
-	/** Changes current custom movement */
+	/** Checks if the player is going fast enough to slide while sliding, if not it puts the player in a crouch */
 	UFUNCTION()
-		bool SetCustomMovementMode(uint8 NewCustomMovementMode);
+		void SlideUpdate();
 
-	/** Resets movement state based on the current movement state */
+	/** Jump in sliding state */
 	UFUNCTION()
-		void ResetMovement();
+		void SlideJump();
+	
+	/** Enable slide check */
+	UFUNCTION()
+		void EnableSlide();
+
+	/** Disable slide check */
+	UFUNCTION()
+		void DisableSlide();
+
+	/** Start slide state */
+	UFUNCTION()
+		void SlideStart();
+
+	/** End slide state */
+	UFUNCTION()
+		void SlideEnd(bool Crouch);
+
+	/** Start crouch state */
+	UFUNCTION()
+		void CrouchSlideCheck();
+
+	/** Jump in crouching state */
+	UFUNCTION()
+		void CrouchJump();
+
+	/** Start crouch state */
+	UFUNCTION()
+		void CrouchStart();
+
+	/** End crouch state */
+	UFUNCTION()
+		void CrouchEnd();
+
+	/** Checks if player can slide */
+		UFUNCTION()
+		bool CanSlide();
+
+	//The amount of impule the player recieves while sliding
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Slide")
+		float SlideImpulseForce = 600.f;
+
+	/** Checks if the player is pressing W while sprinting, if not stop sprinting */
+	UFUNCTION()
+		void SprintUpdate();
+
+	/** Disable sprint update */
+	UFUNCTION()
+		void EnableSprint();
+
+	/** Disable sprint update */
+	UFUNCTION()
+		void DisableSprint();
+
+	/** Start sprint state */
+	UFUNCTION()
+		void SprintStart();
+
+	/** End sprint state */
+	UFUNCTION()
+		void SprintEnd();
+
+	/** Handles if the player will continue sprinting after a jump and land */
+	UFUNCTION()
+		void SprintJump();
+
+	/** Gets called whenever the player presses space */
+	UFUNCTION()
+		void OnJump();
+
 
 	//Camera shakes
 
@@ -326,9 +403,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Camera Shakes")
 		TSubclassOf<UMatineeCameraShake> QuickMantleShake;
-
-   //For sprinting maybe
-	//UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Custom|Sprint")
-	//	float SprintSpeedMultiplier = 1.25;
+ 
+	//Sprinting speed
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Sprint")
+		float SprintSpeed = 1500.f;
 };
 
