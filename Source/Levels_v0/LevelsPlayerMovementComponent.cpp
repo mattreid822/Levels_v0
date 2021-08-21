@@ -745,7 +745,7 @@ void ULevelsPlayerMovementComponent::SlideStart()
 		FVector SlideVector;
 		DrawDebugLine(GetWorld(), CharacterOwner->GetActorLocation(), (CharacterOwner->GetActorUpVector() * -200) + CharacterOwner->GetActorLocation(), FColor::Green, false, 7.0f);
 		GetWorld()->LineTraceSingleByChannel(Hit, CharacterOwner->GetActorLocation(), (CharacterOwner->GetActorUpVector() * -200) + CharacterOwner->GetActorLocation(), ECC_Visibility);
-		SlideVector = FVector::CrossProduct(CharacterOwner->GetActorUpVector(), Hit.ImpactNormal) * -1.0f;
+		SlideVector = FVector::CrossProduct(CharacterOwner->GetActorRightVector(), Hit.ImpactNormal) * -1.0f;
 		
 		//FString GravString = FString::SanitizeFloat(GravityScale);
 
@@ -769,8 +769,9 @@ void ULevelsPlayerMovementComponent::SlideEnd(bool CrouchAfter)
 		{
 			Crouch(true);
 			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Crouch"));
-			SetCustomMovementMode(MOVE_Crouch);
-			MaxWalkSpeed = 300.f;
+			//SetCustomMovementMode(MOVE_Crouch);
+			SprintStart();
+			//MaxWalkSpeed = 300.f;
 			
 		}
 		else
@@ -822,10 +823,10 @@ void ULevelsPlayerMovementComponent::CrouchJump()
 
 void ULevelsPlayerMovementComponent::CrouchStart()
 {
-	if (CustomMovementMode == MOVE_CustomNone)
+	if (CustomMovementMode == MOVE_CustomNone && IsWalking())
 	{
 		Crouch(true);
-		//GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Crouch"));
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange, TEXT("Crouch"));
 		SetCustomMovementMode(MOVE_Crouch);
 		MaxWalkSpeed = 300.f;
 		bWantsToSlide = false;
